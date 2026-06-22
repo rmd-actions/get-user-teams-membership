@@ -6,14 +6,14 @@ It can also be optionally used to check if the user belongs to a given team
 It emits two outputs which are available via the `steps` [output context](https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#steps-context)
 
 * `teams` - Array with the list of teams the user belongs (since it's array you can check if a user belongs to a team using [contains](https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contains) function)
-* `isTeamMember` - A boolean indicating if a user belongs to a given team (always false if `team` parameter is not used)
+* `isTeamMember` - A string (`'true'` or `'false'`) indicating if a user belongs to a given team (always `'false'` if `team` parameter is not used). **Note:** Although this represents a boolean concept, GitHub Actions outputs are always strings, so always compare against the string values `'true'` or `'false'` (e.g. `steps.checkUserMember.outputs.isTeamMember == 'true'`) rather than a boolean literal.
 
 # Usage
 
 See [action.yml](action.yml)
 
 ```yaml
-- uses: tspascoal/get-user-teams-membership@v3
+- uses: tspascoal/get-user-teams-membership@v4
   with:
     username: # The github username for which we want to fetch teams membership in a given organization.
     organization: # optional. Default value ${{ github.repository_owner }} 
@@ -23,10 +23,18 @@ See [action.yml](action.yml)
     GITHUB_TOKEN: # Personal access token used to query github (Requires scope: `read:org`)
 ```
 
+  > [!WARNING]
+  > If you see a warning like `Node.js 20 actions are deprecated... tspascoal/get-user-teams-membership@v3 ...`, update your workflow to `tspascoal/get-user-teams-membership@v4`.
+  >
+  > `v4` has been upgraded to run on Node.js 24 and is the recommended version.
+
 ## Requirements
 
-In order to use this action you need to use a [personal access token (classic)] with `read:org` [scope](https://docs.github.com/en/developers/apps/scopes-for-oauth-apps#available-scopes) (so the builtin in [GITHUB_TOKEN](https://docs.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token) is not enough), or a [fine-grained personal access token] with `Organization permissions > Members > Read-only` scope.
+In order to use this action you need to use one of the following authentication options:
 
+- A [personal access token (classic)] with `read:org` [scope](https://docs.github.com/en/developers/apps/scopes-for-oauth-apps#available-scopes) (so the built-in [GITHUB_TOKEN](https://docs.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token) is not enough)
+- A [fine-grained personal access token] with `Organization permissions > Members > Read-only` scope
+- A [GitHub Apps](https://docs.github.com/en/apps/overview) installation token with `Organization permissions > Members > Read-only` scope. You can use the [create-github-app-token](https://github.com/actions/create-github-app-token) action to generate an installation token.
 
 > **Warning** If you are using GitHub Enterprise Server, this version is only supported on GHES 3.4 or Later. Use v1 if you want to use it on an older GHES installation
 
@@ -35,6 +43,7 @@ In order to use this action you need to use a [personal access token (classic)] 
 
 - [Checks if user belongs to one team or another](#Checks-if-user-belongs-to-one-of-two-teams)
 - [Checks if a user belongs to a given team](#Checks-if-user-belongs-to-a-given-team)
+- [Using a GitHub App installation token](#Using-a-GitHub-App-installation-token)
 
 ### Checks if user belongs to one of two teams
 
@@ -42,7 +51,7 @@ Checks if the user who triggered the worfklow (actor) belongs to one of two team
 and if not adds a label to the pull request to signal it's an external contribution.
 
 ```yaml
--  uses: tspascoal/get-user-teams-membership@v3
+-  uses: tspascoal/get-user-teams-membership@v4
    id: actorTeams
    with:
      username: ${{ github.actor }}
@@ -57,12 +66,35 @@ and if not adds a label to the pull request to signal it's an external contribut
 Checks if the user who triggered the workflow (actor) doesn't belong to the `octocats` or `testing` team
 
 ```yaml
--  uses: tspascoal/get-user-teams-membership@v3
+-  uses: tspascoal/get-user-teams-membership@v4
    id: checkUserMember
    with:
      username: ${{ github.actor }}
      team: 'octocats,testing'
      GITHUB_TOKEN: ${{ secrets.PAT }}
+- if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
+  ...  
+```
+
+### Using a GitHub App installation token
+
+Uses a GitHub App installation token (generated with [create-github-app-token](https://github.com/actions/create-github-app-token)) to check if the user who triggered the workflow belongs to the `octocats` team.
+
+The GitHub App must have `Organization permissions > Members > Read-only` permission granted.
+
+```yaml
+- uses: actions/create-github-app-token@v1
+  id: app-token
+  with:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.PRIVATE_KEY }}
+    owner: ${{ github.repository_owner }}
+- uses: tspascoal/get-user-teams-membership@v4
+  id: checkUserMember
+  with:
+    username: ${{ github.actor }}
+    team: 'octocats'
+    GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 - if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
   ...  
 ```

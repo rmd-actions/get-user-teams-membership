@@ -1,4 +1,6 @@
-name: integration tests
+# Runs unit and integration tests on push and pull request to default branch.
+# Run both on the same job, they are so fast no need to parallelize it
+name: tests
 permissions:
   contents: read
 
@@ -10,7 +12,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     if: github.actor != 'dependabot[bot]'
     
     env:
@@ -23,18 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: build
+      - name: install, test and build
         run: |
-          npm install
+          npm ci
+          npm test -- --run
           npm run build
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@v4
+        uses: actions/create-github-app-token@v3
         with:
-          organization: ${{ env.organization }}
-          application_id: ${{ secrets.APPLICATION_ID }}
-          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          client-id: ${{ vars.CLIENT_ID }}
+          private-key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          owner: ${{ env.organization }}
 
       - name: Get Teams
         uses: ./
@@ -75,7 +78,8 @@ jobs:
       - name: Not a team member? Fail
         if: ${{ steps.check-teams-success.outputs.isTeamMember == 'false' }}
         run: |
-          echo "failed=true" >> $$GITHUB_ENV
+          echo "Expected to belong to ${{ env.check-team }}. Failing" >> $GITHUB_SUMMARY
+          echo "failed=true" >> $GITHUB_ENV
 
       #################### Check if it belongs to at least one of two teams
       - name: check if member of ${{ env.check-more-than-one-team }}
@@ -90,7 +94,7 @@ jobs:
       - name: Not a team member in at least one of the teams? Fail
         if: ${{ steps.check-more-than-one-team-success.outputs.isTeamMember == 'false' }}
         run: |
-          echo "Expected to belong to at least one team. Failing"
+          echo "Expected to belong to at least one team. Failing" >> $GITHUB_SUMMARY
           echo "failed=true" >> $$GITHUB_ENV
       ####################
 
@@ -106,7 +110,8 @@ jobs:
       - name: Dummy Team membership? Fail
         if: ${{ steps.check-not-team.outputs.isTeamMember == 'true' }}
         run: |
-          echo "failed=true" >> $$GITHUB_ENV
+          echo "Should not belong to ${{ env.check-not-team }}. Failing" >> $GITHUB_SUMMARY
+          echo "failed=true" >> $GITHUB_ENV
 
       - name: Tests failed?
         if: ${{ env.failed == 'true' }}
